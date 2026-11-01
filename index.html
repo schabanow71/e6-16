@@ -1,1 +1,161 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Е6-16 — пороги</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:#121820;color:#e8edf4}
+.wrap{max-width:760px;margin:0 auto;padding:26px 18px}
+h1{font-size:23px;margin:0 0 7px}
+p{color:#9daabc;margin:0 0 30px;font-size:14px}
+.panel{background:#202a36;border:1px solid #364352;border-radius:18px;padding:26px 18px 22px}
+.axis-title{display:flex;justify-content:space-between;font-size:13px;color:#cbd5e1;margin-bottom:45px}
+.track-zone{position:relative;margin:0 13px 0;touch-action:none;user-select:none;-webkit-user-select:none;height:86px}
+.track{position:absolute;top:22px;left:0;right:0;height:28px;display:flex;border-radius:6px;overflow:hidden;box-shadow:0 0 0 1px #778393}
+.zone{height:100%;min-width:0}
+.green{background:#1baf59}
+.gw{background:repeating-linear-gradient(90deg,#1baf59 0 5px,#f0f4f7 5px 10px)}
+.gr{background:repeating-linear-gradient(90deg,#1baf59 0 5px,#e04444 5px 10px)}
+.rw{background:repeating-linear-gradient(90deg,#e04444 0 5px,#f0f4f7 5px 10px)}
+.red{background:#e04444}
+.handle{position:absolute;top:13px;width:16px;height:46px;transform:translateX(-50%);border-radius:5px;background:linear-gradient(90deg,#a3afbe,#e8edf3 45%,#778597);border:2px solid #293341;box-shadow:0 2px 5px #0009;cursor:grab;touch-action:none;z-index:2}
+.handle.active{background:#ffdf81;border-color:#fff2c4;z-index:4;cursor:grabbing}
+.bubble{position:absolute;top:-30px;transform:translateX(-50%);background:#f2f6fa;color:#111827;border-radius:7px;padding:4px 7px;white-space:nowrap;font-weight:700;font-size:13px;pointer-events:none;z-index:5;box-shadow:0 3px 9px #0007}
+.ticks{position:absolute;top:61px;left:0;right:0;height:26px}
+.tick{position:absolute;transform:translateX(-50%);font-size:11px;color:#b4c0ce}
+.tick:before{content:'';display:block;margin:0 auto 3px;width:1px;height:5px;background:#7b8999}
+.hint{font-size:13px;color:#a8b5c5;margin:20px 0 0}
+.values{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:25px}
+.value{background:#151d27;border-radius:10px;padding:10px 5px;text-align:center}
+.value strong{font-size:17px;display:block}
+.value span{font-size:11px;color:#9eacbd}
+button{background:#344557;border:1px solid #52657b;color:white;border-radius:9px;padding:10px 16px;margin-top:22px;cursor:pointer}
+@media(max-width:390px){
+.panel{padding:22px 11px}
+.wrap{padding:20px 10px}
+.handle{width:15px}
+.value strong{font-size:15px}
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+<h1>Е6-16 · Настройка порогов</h1>
+<p>Макет интерфейса · без подключения BLE</p>
+<section class="panel">
+<div class="axis-title">
+<span>200 МОм · норма</span>
+<span>0 МОм · КЗ</span>
+</div>
+<div class="track-zone" id="trackZone">
+<div class="track" id="track">
+<div class="zone green"></div>
+<div class="zone gw"></div>
+<div class="zone gr"></div>
+<div class="zone rw"></div>
+<div class="zone red"></div>
+</div>
+<div class="ticks" id="ticks"></div>
+</div>
+<div class="values" id="values"></div>
+<p class="hint">Перетаскивайте любой из четырёх движков. При столкновении он толкает соседние. Шаг — 10 МОм.</p>
+<button id="reset">Сбросить пороги</button>
+</section>
+</main>
+<script>
+(()=>{'use strict';
+const zone=document.getElementById('trackZone'),track=document.getElementById('track'),ticks=document.getElementById('ticks'),values=document.getElementById('values');
+// Positions are in 10 MOhm increments, from 200 at left to 0 at right.
+let positions=[4,8,12,16],active=-1,origin=0,initial=[];
+const zones=[...track.children],handles=[];
+for(let i=0;i<4;i++){
+let h=document.createElement('div');
+h.className='handle';
+h.setAttribute('role','slider');
+h.setAttribute('tabindex','0');
+h.setAttribute('aria-label','Порог '+(i+1));
+zone.appendChild(h);
+handles.push(h);
+h.addEventListener('pointerdown',e=>{
+e.preventDefault();
+active=i;
+origin=e.clientX;
+initial=positions.slice();
+h.setPointerCapture(e.pointerId);
+draw();
+});
+h.addEventListener('pointermove',e=>{
+if(active!==i)return;
+let w=track.getBoundingClientRect().width;
+let delta=Math.round((e.clientX-origin)/w*20);
+let target=Math.max(0,Math.min(20,initial[i]+delta));
+positions=initial.slice();
+if(target>initial[i]){
+for(let j=i;j<4;j++)positions[j]=Math.max(positions[j],target)
+}else{
+for(let j=i;j>=0;j--)positions[j]=Math.min(positions[j],target)
+}
+draw();
+});
+const end=()=>{
+if(active===i){active=-1;draw()}
+};
+h.addEventListener('pointerup',end);
+h.addEventListener('pointercancel',end);
+h.addEventListener('lostpointercapture',end);
+h.addEventListener('keydown',e=>{
+if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;
+e.preventDefault();
+const next=Math.max(0,Math.min(20,positions[i]+(e.key==='ArrowRight'?1:-1)));
+if(next>positions[i])
+for(let j=i;j<4;j++)positions[j]=Math.max(positions[j],next);
+else
+for(let j=i;j>=0;j--)positions[j]=Math.min(positions[j],next);
+active=i;
+draw();
+});
+h.addEventListener('blur',()=>{active=-1;draw()});
+}
+for(let p=0;p<=20;p+=5){
+let t=document.createElement('span');
+t.className='tick';
+t.style.left=(p*5)+'%';
+t.textContent=200-p*10;
+ticks.appendChild(t)
+}
+function draw(){
+let edges=[0,...positions,20];
+for(let j=0;j<5;j++)
+zones[j].style.width=((edges[j+1]-edges[j])*5)+'%';
+handles.forEach((h,i)=>{
+h.style.left=(positions[i]*5)+'%';
+h.classList.toggle('active',i===active);
+h.setAttribute('aria-valuemin','0');
+h.setAttribute('aria-valuemax','200');
+h.setAttribute('aria-valuenow',String(200-positions[i]*10));
+let b=h.querySelector('.bubble');
+if(i===active){
+if(!b){
+b=document.createElement('div');
+b.className='bubble';
+h.appendChild(b)
+}
+b.textContent=(200-positions[i]*10)+' МОм'
+}else if(b)b.remove()
+});
+values.innerHTML=positions.map((p,i)=>`<div class="value"><strong>${200-p*10} МОм</strong><span>Порог ${i+1}</span></div>`).join('')
+}
+document.getElementById('reset').addEventListener('click',()=>{
+positions=[4,8,12,16];
+active=-1;
+draw()
+});
+draw();
+})();
+</script>
+</body>
+</html>
 
